@@ -2,8 +2,6 @@
 
 TODO: add screenshots here
 
-TODO: Rotation
-
-TODO: View objects in scene tree
+TODO: Apply tree as found in "id" property
 
 TODO: Remove verbose prints
