@@ -5,11 +5,12 @@ extends Node3D
 @export var json_file_path: String = "res://MP_Dumbo_race_v1.0.spatial.json"
 
 @export_tool_button("Run") var x = go
-
-#TODO: Rotation
-#TODO: View objects in scene tree
+@export_tool_button("IsInScene") var y = test
 
 var allFiles: PackedStringArray
+
+func test():
+	print("Is inside tree: ", is_inside_tree())
 
 func go():
 	print("start reading the json")
@@ -80,8 +81,11 @@ func create_object_from_data(obj_data: Dictionary):
 
 	var instance: Node3D = scene_res.instantiate()
 	print("prefab found. Adding to scene...")
-	add_child(instance)
-	instance.set_owner(self)
+	addChild.call_deferred(instance, obj_data)
+	
+func addChild(instance: Node3D, obj_data: Dictionary):
+	self.add_child(instance)
+	instance.owner = get_tree().edited_scene_root
 
 	# Set name if provided
 	if obj_data.has("name"):
@@ -92,6 +96,16 @@ func create_object_from_data(obj_data: Dictionary):
 		var pos = obj_data["position"]
 		if pos.has("x") and pos.has("y") and pos.has("z"):
 			instance.position = Vector3(pos["x"], pos["y"], pos["z"])
+	
+	# Set rotation annd scale
+	if obj_data.has("right") and obj_data.has("up") and obj_data.has("front"):
+		var right = Vector3(obj_data["right"]["x"], obj_data["right"]["y"], obj_data["right"]["z"])
+		var up = Vector3(obj_data["up"]["x"], obj_data["up"]["y"], obj_data["up"]["z"])
+		var front = Vector3(obj_data["front"]["x"], obj_data["front"]["y"], obj_data["front"]["z"])
+		var scale: Vector3 = Vector3(right.length(), up.length(), front.length())
+		var rotation = Basis(right, up, front).get_euler()
+		instance.rotation = rotation
+		instance.scale = scale
 
 	# Apply any additional custom properties that exist in the object
 	for key in obj_data.keys():
@@ -103,6 +117,3 @@ func create_object_from_data(obj_data: Dictionary):
 			instance.set(key, obj_data[key])
 		elif instance.has_method("set_" + key):
 			instance.call("set_" + key, obj_data[key])
-		else:
-			# You can comment this out if you don't want warnings
-			print("Property '%s' not found on %s" % [key, prefab_type])
