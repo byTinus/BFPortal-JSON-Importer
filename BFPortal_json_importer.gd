@@ -5,16 +5,17 @@ extends Node3D
 @export var json_file_path: String = "res://MP_Dumbo_race_v1.0.spatial.json"
 
 @export_tool_button("Run") var x = go
-@export_tool_button("IsInScene") var y = test
 
-var allFiles: PackedStringArray
+var allFiles: PackedStringArray = []
+const slash_identifier: String = "&SLASH&"
 
-func test():
-	print("Is inside tree: ", is_inside_tree())
+# From VehicleSpawner
+enum VehicleType_selection {Abrams, Leopard, Cheetah, CV90, Gepard, UH60, Eurocopter, AH64, Vector, Quadbike, GolfCart, Marauder, Flyer60, JAS39, F22, F16, M2Bradley, SU57, UH60_Pax, Marauder_Pax}
 
 func go():
 	print("start reading the json")
-	allFiles = get_all_files("res://objects/")
+	allFiles.append_array(get_all_files("res://objects/"))
+	allFiles.append_array(get_all_files("res://addons/bf_portal/portal_tools/types/"))
 	load_objects_from_json(json_file_path)
 
 
@@ -45,6 +46,7 @@ func load_objects_from_json(path: String):
 	for obj_data in objects:
 		if obj_data is Dictionary:
 			create_object_from_data(obj_data)
+	# TODO: reparent and fix assigned links
 
 func get_all_files(path: String, depth: int = 0) -> PackedStringArray: 
 	#print("recursion depth: ", depth, " - ",path)
@@ -82,14 +84,18 @@ func create_object_from_data(obj_data: Dictionary):
 	var instance: Node3D = scene_res.instantiate()
 	print("prefab found. Adding to scene...")
 	addChild.call_deferred(instance, obj_data)
-	
+
 func addChild(instance: Node3D, obj_data: Dictionary):
 	self.add_child(instance)
 	instance.owner = get_tree().edited_scene_root
 
-	# Set name if provided
-	if obj_data.has("name"):
-		instance.name = str(obj_data["name"])
+	# Set name from id, which holds the nested path to the object.
+	# issue: '/' character is replaced with _, so use a different identifier
+	# After instantiating all objects, reparent and assign links
+	if obj_data.has("id"):
+		var parsedName: String = obj_data["id"]
+		parsedName = parsedName.replace('/', slash_identifier)
+		instance.name = parsedName
 
 	# Set position (3D)
 	if obj_data.has("position"):
@@ -109,11 +115,20 @@ func addChild(instance: Node3D, obj_data: Dictionary):
 
 	# Apply any additional custom properties that exist in the object
 	for key in obj_data.keys():
-		if key in ["type", "position", "up", "front", "right", "name", "id"]:
-			continue  # skip transform and metadata keys
-
-		# If the property exists on the instance, set it
-		if key in instance:
-			instance.set(key, obj_data[key])
-		elif instance.has_method("set_" + key):
-			instance.call("set_" + key, obj_data[key])
+		match key:
+			"type", "position", "up", "front", "right", "name", "id":
+				continue
+			"points":
+				# PolygonVolume. assign points: PackedVector2Array
+				var points: PackedVector2Array = []
+				for point in obj_data[key]:
+					points.append(Vector2(point["x"], point["z"]))
+					if instance.position.y == 0:
+						instance.position.y = point["y"]
+				instance.set(key, PackedVector2Array(points))
+			"VehicleType":
+				var t = VehicleType_selection.get(obj_data[key])
+				instance.set(key, t)
+			_:
+				# If the property exists on the instance, set it
+				instance.set(key, obj_data[key])
